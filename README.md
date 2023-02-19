@@ -1,4 +1,6 @@
 # THRII-direct-USB-pedalboard
+Buhjuhwuh's fork of martinzw's controller pedal for Yamaha THR30II amp.
+
 A pedalboard that can send complete settings patches to a THRII guitar amplifier with direct USB-connection.
 
 
