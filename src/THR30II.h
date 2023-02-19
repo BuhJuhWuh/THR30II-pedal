@@ -5,7 +5,7 @@
 /*
  * THR30II.h
  *
- * Last modified: 09/2021 
+ * Last modified: 19/02/2023 Buhjuhwuh
  *  Author: Martin Zwerschke
  *
  */ 
@@ -297,14 +297,14 @@ class THR30II_Settings
 	void updateConnectedBanner(); //Show the connected Model 
 	int8_t getActiveUserSetting(); //Getter for number of the active user setting
 	bool getUserSettingsHaveChanged(); //Getter for state of user Settings
-	//void SetAmp(uint8_t _amp);
+	// void SetAmp(uint8_t _amp);
 	void SetColAmp(THR30II_COL _col, THR30II_AMP _amp);  //Setter for the Simulation Collection
 	void setColAmp(uint16_t ca); //Setter for the Simulation Collection by key
 	void SetCab(THR30II_CAB _cab);  //Setter for the Cabinet Simulation
 	void ReverbSelect(THR30II_REV_TYPES type);  //Setter for selection of the reverb type
 	void EffectSelect(THR30II_EFF_TYPES type);   //Setter for selection of the Effect type
 	void EchoSelect(THR30II_ECHO_TYPES type);   //Setter for selection of the Echo type
-	
+
 	String ParseSysEx(const byte cur[], int cur_len);
 	
     //---------FUNCTION FOR SENDING COL/AMP SETTING TO THR30II -----------------
@@ -453,6 +453,18 @@ class THR30II_Settings
 	//static States _last_state;
 	bool sendChangestoTHR = true;  //set to false, if changes come from THR-Knobs
 	//State vars
+
+	//Try making this one public to solve error - seems to help
+	std::array<bool,GATE-COMPRESSOR+1> unit;  //actual on/off state of the effect units
+
+	//try making these public to solve error
+	THR30II_REV_TYPES reverbtype = SPRING;
+	THR30II_EFF_TYPES effecttype = PHASER;
+	THR30II_ECHO_TYPES echotype = TAPE_ECHO;
+	THR30II_AMP amp; //Field for the simulated AMP model
+    THR30II_COL col; //Field for the simulation collection (BOUTIQUE, CLASSIC, MODERN)
+    THR30II_CAB cab; //Field for the simulated cabinet
+
   private:
 	bool MIDI_Activated = false;   //set true, if MIDI unlocked by magic key (success checked by receiving first regular THR-SysEx)
 	
@@ -470,11 +482,12 @@ class THR30II_Settings
      //00 24 00 02 : THR30IIWireless
      //00 24 00 03 : THR30IIAcousticWireless
 
-	std::array<bool,GATE-COMPRESSOR+1> unit;  //actual on/off state of the effect units
+	//Try making this one public to solve error - seems to help
+	//std::array<bool,GATE-COMPRESSOR+1> unit;  //actual on/off state of the effect units
 	
-	THR30II_AMP amp; //Field for the simulated AMP model
-    THR30II_COL col; //Field for the simulation collection (BOUTIQUE, CLASSIC, MODERN)
-    THR30II_CAB cab; //Field for the simulated cabinet
+	// THR30II_AMP amp; //Field for the simulated AMP model
+    // THR30II_COL col; //Field for the simulation collection (BOUTIQUE, CLASSIC, MODERN)
+    // THR30II_CAB cab; //Field for the simulated cabinet
     int8_t activeUserSetting; //Field for the selected user preset's index (0..4 , -1 for none / actual)
     bool userSettingsHaveChanged; //Field for state of selected user preset
 
@@ -510,11 +523,10 @@ class THR30II_Settings
 		}
 	};
 
-	THR30II_REV_TYPES reverbtype = SPRING;
-
-	THR30II_EFF_TYPES effecttype = PHASER;
-
-	THR30II_ECHO_TYPES echotype = TAPE_ECHO;
+	//try making these public to solve error
+	// THR30II_REV_TYPES reverbtype = SPRING;
+	// THR30II_EFF_TYPES effecttype = PHASER;
+	// THR30II_ECHO_TYPES echotype = TAPE_ECHO;
 
     //Yamaha THRII models names
     String THR30II_MODEL_NAME();

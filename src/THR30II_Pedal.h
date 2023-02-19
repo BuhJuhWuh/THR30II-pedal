@@ -5,7 +5,7 @@
 /*
  * THR30II.h
  *
- * Last modified: 09/2021 
+ * Last modified: 19/02/2023 Buhjuhwuh
  *  Author: Martin Zwerschke
  *
  */ 
@@ -22,7 +22,9 @@ void OnSysEx(const uint8_t *data, uint16_t length, bool complete);
 //uint16_t dePack(uint8_t *raw, uint8_t *clean, uint16_t received); //not needed on Teensy
 void drawStatusMask(uint8_t x, uint8_t y);
 void send_patch(uint8_t patch_id);
-void drawPatchName(String pana,uint16_t color,uint8_t y);
+void drawPatchID(uint16_t fgcolour, int patchID);
+void drawPatchIcon(int x, int y, int w, int h, uint16_t colour, int patchID);
+void drawPatchName(uint16_t fgcolour, String patchname);
 void send_dump_request();
 void solo_deactivate(bool restore);
 void solo_activate();
@@ -32,10 +34,14 @@ void do_volume_patch();
 void undo_volume_patch();
 void send_init();         //Try to activate THR30II MIDI 
 void WorkingTimer_Tick();
+void drawConnIcon(bool THRconnected);
+void do_gain_boost();
+void undo_gain_boost();
 
 extern String preSelName; //Name of the pre selected patch
 
-enum UIStates { UI_idle, UI_init_act_set, UI_act_vol_sol, UI_patch, UI_ded_sol, UI_pat_vol_sol}; //States for the patch/solo activation user interface
+// enum UIStates { UI_idle, UI_init_act_set, UI_act_vol_sol, UI_patch, UI_ded_sol, UI_pat_vol_sol}; //States for the patch/solo activation user interface
+enum UIStates {UI_idle, UI_home_amp, UI_home_patch, UI_edit, UI_save, UI_name};
 
 extern UIStates _uistate;
 
@@ -103,7 +109,7 @@ const byte TFT_DIR_RIGHT_LEFT =3;
 #define ST7789_GOLD 0xFEA0 
 #define ST7789_GOLDENROD 0xDD24 
 #define ST7789_GRAY 0x8410 
-//#define ST7789_GREEN 0x0400 
+#define ST7789_GREEN 0x0400 
 #define ST7789_GREENYELLOW 0xAFE5 
 #define ST7789_HONEYDEW 0xF7FE 
 #define ST7789_HOTPINK 0xFB56 
@@ -192,5 +198,47 @@ const byte TFT_DIR_RIGHT_LEFT =3;
 #define ST7789_WHITESMOKE 0xF7BE 
 #define ST7789_YELLOW 0xFFE0 
 #define ST7789_YELLOWGREEN 0x9E66
+
+// Expand colour palette
+#define TFT_THRDARKGREY         tft.color565( 63,  63,  63)
+#define TFT_THRVDARKGREY        tft.color565(  8,   8,   8)
+#define TFT_THRCREAM            tft.color565(248, 227, 198)
+#define TFT_THRBROWN            tft.color565(122,  97,  67)
+
+#define TFT_THRORANGE           tft.color565(255, 111,   0)
+#define TFT_THRDIMORANGE        tft.color565(127,  63,   0)
+#define TFT_THRWHITE            tft.color565(255, 255, 255)
+#define TFT_THRDIMWHITE         tft.color565( 95,  95,  95)
+#define TFT_THRYELLOW           tft.color565(255, 255,   0)
+#define TFT_THRDIMYELLOW        tft.color565(127, 127,   0)
+
+#define TFT_THRLIGHTRED         tft.color565(255, 191, 191)
+#define TFT_THRGREEN            tft.color565(  0, 255,   0)
+#define TFT_THRLIGHTGREEN       tft.color565(191, 255, 191)
+#define TFT_THRBLUE             tft.color565(  0,   0, 255)
+#define TFT_THRLIGHTBLUE        tft.color565(191, 191, 255)
+
+#define TFT_THRFORESTGREEN      tft.color565( 31, 191, 127)
+#define TFT_THRDIMFORESTGREEN   tft.color565( 15,  79,  47)
+#define TFT_THRLIME             tft.color565( 95, 255,   0)
+#define TFT_THRDIMLIME          tft.color565( 63,  95,   0)
+#define TFT_THRLEMON            tft.color565(191, 255,   0)
+#define TFT_THRDIMLEMON         tft.color565( 95, 111,   0)
+#define TFT_THRMANGO            tft.color565(255, 191,   0)
+#define TFT_THRDIMMANGO         tft.color565(111,  79,   0)
+
+#define TFT_THRROYALBLUE        tft.color565( 31,  31, 255)
+#define TFT_THRDIMROYALBLUE     tft.color565( 15,  15, 127)
+#define TFT_THRSKYBLUE          tft.color565(  0, 191, 255)
+#define TFT_THRDIMSKYBLUE       tft.color565(  0,  95, 127)
+
+#define TFT_THRRED              tft.color565(255,   0,   0)
+#define TFT_THRDIMRED           tft.color565(111,   0,   0)
+#define TFT_THRMAGENTA          tft.color565(255,   0, 159)
+#define TFT_THRDIMMAGENTA       tft.color565( 95,   0,  79)
+#define TFT_THRPURPLE           tft.color565(255,   0, 255)
+#define TFT_THRDIMPURPLE        tft.color565(127,   0, 127)
+#define TFT_THRVIOLET           tft.color565(191,   0, 255)
+#define TFT_THRDIMVIOLET        tft.color565( 95,   0, 127)
 
 #endif
