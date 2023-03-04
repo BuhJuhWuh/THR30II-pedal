@@ -40,6 +40,7 @@ My wishlist:
 </ol>
 
 I agree with martinzw's **DISCLAIMER:**
+
 THE HARDWARE SUGGESTIONS THE LISTED SOFTWARE AND ALL INFORMATION HERE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE AND HARDWARE SUGGESTIONS OR THE USE OR OTHER DEALINGS IN THE SOFTWARE AND HARDWARE.
 
 I have no connection to Yamaha / Line6. Every knowledge about the data communications protocol was gained by experimenting, try and error and by looking at the data stream. I especially have not decompiled any part of the Yamaha software application nor of the THR's firmware. Described protocol behaviour can be totally wrong. I only describe results from (good) guesses and succeded experiments - not facts!
