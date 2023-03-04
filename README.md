@@ -41,8 +41,21 @@ My wishlist:
 
 <p><img src="/images/THR%20pedal%20front.jpg" alt="THR pedal front" title="THR pedal front" width="800"></p>
 
-<p><img src="/images/THR%20pedal%20back.jpg" alt="THR pedal back" title="THR pedal back" width="800"></p>
+| Button (from top left) | Function | Tap | Hold |
+| :---: | --- | --- | --- |
+| 1 | Patch | Submit | (Patch save mode) |
+| 2 | Amp | Cycle sim | Collection > Amp > Cabinet > |
+| 3 |  |  |  |
+| 4 |  |  |  |
+| 5 |  |  |  |
+| 6 |  |  |  |
+| 7 |  |  |  |
+| 8 |  |  |  |
+| 9 |  |  |  |
+| 10 |  |  |  |
 
+<p><img src="/images/THR%20pedal%20back.jpg" alt="THR pedal back" title="THR pedal back" width="800"></p>
+<p>L-R: exp pedal TRS inputs x2, USB-B input from PC, USB-A output to amp, (top) power supply selection (USB/mains), (bottom) on/off, DC power jacks (can daisy chain amp's 15V power supply).</p>
 <p><img src="/images/THR%20pedal%20screen.jpg" alt="THR pedal screen" title="THR pedal screen" width="800"></p>
 
 <p><img src="/images/THR%20pedal%20innards.jpg" alt="THR pedal innards" title="THR pedal innards" width="800"></p>
