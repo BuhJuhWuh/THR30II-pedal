@@ -18,7 +18,7 @@ My wishlist:
   <li>Included inputs for a pair of volume/expression pedals;</li>
   <li>Can now switch on and off FX units;</li>
   <li>Can now switch between FX modes (this necessitated a move away from standard .thrl6p format, since it doesn't store all FX unit parameters);</li>
-  <li>Edited screen UI, replacing text with icons, using colour-coding to show FX unit statuses;</li>
+  <li>Edited screen UI, replacing text with icons (using sprites for zero flicker), using colour-coding to show FX unit statuses;</li>
   <li>Edited patch switching logic to make it more to my taste, including ability to change between "select then submit" and "change immediately" modes;</li>
   <li>Replaced solo modes with ability to turn on and off gain boost, gate, and compressor;</li>
   <li>Added ability to switch amp collection/type and cabinet type.</li>
@@ -40,7 +40,9 @@ My wishlist:
 </ol>
 
 <p><img src="/images/THR%20pedal%20front.jpg" alt="THR pedal front" title="THR pedal front" width="800"></p>
+
 **Function table** (items in brackets not implemented yet)
+
 | Button (from top left) | Function | Tap | Hold |
 | :---: | --- | --- | --- |
 | 1 | Patch | Submit | (Patch save mode - tbc) |
