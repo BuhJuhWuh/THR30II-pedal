@@ -39,15 +39,15 @@ My wishlist:
   <li>Any way to add tuner access (both control and LED feedback) from foot pedal...?</li>
 </ol>
 
-![THR pedal front](images/THR pedal front.jpg)
+<p><img src="/images/THR%20pedal%20front.jpg" alt="THR pedal front" title="THR pedal front" width="800"></p>
 
-![THR pedal back](images/THR pedal back.jpg)
+<p><img src="/images/THR%20pedal%20back.jpg" alt="THR pedal back" title="THR pedal back" width="800"></p>
 
-![THR pedal screen](images/THR pedal screen.jpg)
+<p><img src="/images/THR%20pedal%20screen.jpg" alt="THR pedal screen" title="THR pedal screen" width="800"></p>
 
-![THR pedal innards](images/THR pedal innards.jpg)
+<p><img src="/images/THR%20pedal%20innards.jpg" alt="THR pedal innards" title="THR pedal innards" width="800"></p>
 
-![THR pedal wiring as-built](images/THR pedal wiring as-built.jpg)
+<p><img src="/images/THR%20pedal%20wiring%20as-built.png" alt="THR pedal wiring as-built" title="THR pedal wiring as-built" width="800"></p>
 
 I agree with martinzw's **DISCLAIMER:**
 
