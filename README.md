@@ -40,7 +40,7 @@ My wishlist:
 </ol>
 
 <p><img src="/images/THR%20pedal%20front.jpg" alt="THR pedal front" title="THR pedal front" width="800"></p>
-<p>**Function table** (items in brackets not implemented yet)</p>
+**Function table** (items in brackets not implemented yet)
 | Button (from top left) | Function | Tap | Hold |
 | :---: | --- | --- | --- |
 | 1 | Patch | Submit | (Patch save mode - tbc) |
