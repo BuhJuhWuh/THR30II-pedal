@@ -40,19 +40,19 @@ My wishlist:
 </ol>
 
 <p><img src="/images/THR%20pedal%20front.jpg" alt="THR pedal front" title="THR pedal front" width="800"></p>
-
+<p>**Function table** (items in brackets not implemented yet)</p>
 | Button (from top left) | Function | Tap | Hold |
 | :---: | --- | --- | --- |
-| 1 | Patch | Submit | (Patch save mode) |
-| 2 | Amp | Cycle sim | Collection > Amp > Cabinet > |
-| 3 |  |  |  |
-| 4 |  |  |  |
-| 5 |  |  |  |
-| 6 |  |  |  |
-| 7 |  |  |  |
-| 8 |  |  |  |
-| 9 |  |  |  |
-| 10 |  |  |  |
+| 1 | Patch | Submit | (Patch save mode - tbc) |
+| 2 | Amp | Cycle sim | Cycle Collection > Amp > Cabinet > |
+| 3 | (Utility) | (Tap tempo) | (Effect edit mode - tbc) |
+| 4 | Patch- | -1 | Toggle immediate patch select |
+| 5 | Patch+ | +1 | +5 |
+| 6 | (Exp pedal mode) | (tbc) | (tbc) |
+| 7 | Dynamics | On/Off | Cycle Boost> Comp > Gate |
+| 8 | Effect | On/Off | Cycle Chorus > Flanger > Phaser >Tremolo > |
+| 9 | Echo | On/Off | Cycle Tape Echo > Digital Delay > |
+| 10 | Reverb | On/Off | Cycle Spring > Room > Plate > Hall |
 
 <p><img src="/images/THR%20pedal%20back.jpg" alt="THR pedal back" title="THR pedal back" width="800"></p>
 <p>L-R: exp pedal TRS inputs x2, USB-B input from PC, USB-A output to amp, (top) power supply selection (USB/mains), (bottom) on/off, DC power jacks (can daisy chain amp's 15V power supply).</p>
