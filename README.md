@@ -51,7 +51,7 @@ My wishlist:
 | 4 | Patch- | -1 | Toggle immediate patch select |
 | 5 | Patch+ | +1 | +5 |
 | 6 | (Exp pedal mode) | (tbc) | (tbc) |
-| 7 | Dynamics | On/Off | Cycle Boost> Comp > Gate |
+| 7 | Dynamics | On/Off | Cycle Gain Boost> Compressor > Gate |
 | 8 | Effect | On/Off | Cycle Chorus > Flanger > Phaser >Tremolo > |
 | 9 | Echo | On/Off | Cycle Tape Echo > Digital Delay > |
 | 10 | Reverb | On/Off | Cycle Spring > Room > Plate > Hall |
