@@ -1,53 +1,45 @@
 # THRII-direct-USB-pedalboard
 Buhjuhwuh's fork of martinzw's controller pedal for Yamaha THR30II amp.
 
-A pedalboard that can send complete settings patches to a THRII guitar amplifier with direct USB-connection.
+A pedalboard that can send complete settings patches (as well as individual parameter settings) to a THRII guitar amplifier with direct USB-connection.
 
+It rests heavily on the excellent work done by martinzw to reverse engineer the communications protocols.  His 6-button pedal can switch between pre-programmed patches (generated from THR app on PC in .thrl6p format), as well as incorporating solo patch and volume-boosting solo modes.  Read up on his project first.
 
-<p align="left">
-  <img src="https://github.com/martinzw/THRII-direct-USB-pedalboard/blob/main/Pedalboard_top1.jpg" width="350" title="THRII-direct-USB-pedalboard" alt="The pedalboard (almost ready)">
-</p>
+My wishlist:
 
-*Note the disclaimer down this page!*
+(done)
 
-**Demonstration video of the prototype:**
+<ol>
+  <li>Built pedal. With more buttons!</li>
+  <li>Included ability to daisy-chain THR's power supply, or run from onboard battery;</li>
+  <li>Updated screen libraries to match my hardware;</li>
+  <li>Updated button libraries to add multiple functions (tap/hold/double tap);</li>
+  <li>Included status lights;</li>
+  <li>Included inputs for a pair of volume/expression pedals;</li>
+  <li>Can now switch on and off FX units;</li>
+  <li>Can now switch between FX modes (this necessitated a move away from standard .thrl6p format, since it doesn't store all FX unit parameters);</li>
+  <li>Edited screen UI, replacing text with icons, using colour-coding to show FX unit statuses;</li>
+  <li>Edited patch switching logic to make it more to my taste, including ability to change between "select then submit" and "change immediately" modes;</li>
+  <li>Replaced solo modes with ability to turn on and off gain boost, gate, and compressor;</li>
+  <li>Added ability to switch amp collection/type and cabinet type.</li>
+</ol>
 
-[![IMAGE Demonstration video](https://img.youtube.com/vi/Kstgtiw6ibM/0.jpg)](https://www.youtube.com/watch?v=Kstgtiw6ibM)
+(in progress)
 
-The Yamaha THRII-series are small guitar practice amplifiers.
+<ol>
+  <li>Expression pedals are sensed and read correctly - now need to connect inputs to selected parameters, including means of selecting which parameters they are attached to.  This probably requires a new state machine.  Start by making both assignable; may choose to dedicate one to volume only.</li>
+</ol>
 
-There is a smartphone app and a PC and Mac application to control all the sound parameters.
-There even is a bluetooth connection for using foot switches with this amp. But you always need the smartphone app running to use a bluetooth foot switch.
-Furthermore you can only switch some dedicated parameters with a bluetooth footswitch.
+(to do)
 
-My project's goal is to avoid the sometimes not very stable bluetooth connection and connect directly to the amp via USB-cable.
-It is possible to send whole "patch" settings including a complete set of parameters by pressing a button on the board with your foot.
-(see demonstration video)
+<ol>
+  <li>Add "save mode" giving ability to save patches back to SD card (including copying/re-ordering patches, and naming patches via UI);</li>
+  <li>Add "parameter edit mode" to allow direct editing from the pedal: view and change individual parameters with expression pedal and/or buttons;</li>
+  <li>Add tap tempo input for delay/FX, including different tap tempo modes (crotchet/dotted/triplet/etc);</li>
+  <li>Any way to add tuner access (both control and LED feedback) from foot pedal...?</li>
+</ol>
 
-To achieve this, a Teensy 3.6 or 4.1 microcontroller board, that is capable of USB-host mode, connects to the THRII via the wirde USB interface.
-It then activates the USB-MIDI-interface and communicates with the THRII by exchangig MIDI SystemExclusive messages.
-
-On a TFT display the actual settings are shown and with foot switches a "patch" can be pre-selected from a library stored on the controller or a SD-card.
-
-Patches can be pre-selected by choosing a group of 5 patches (e.g. containing 5 sounds for a song) and separately choosing a patch from that group. 
-A "Patch-Send" button activates that special patch on the THRII.
-
-A "SOLO" button either activates an altered sound patch fitting to the actual one or (if no dedicated solo patch exists) toggles a volume increasement.
-
-<p align="left">
-  <img src="https://github.com/martinzw/THRII-direct-USB-pedalboard/blob/main/Pedalboard_back2.jpg" width="350" title="THRII-direct-USB-pedalboard" alt="backside">
-</p>
-
-More information is available in the Wiki and in the pdf-document about the SysEx protocol.
-
-**Note for 07/27/2022**
-A new firmware for the THR30II is online (1.43.0.b)
-For this reason, the provided code was updated in some positions
-**Note for 02/16/2023**
-A new firmware for the THR30II is online (1.44.0.a)
-Code patched
-
-**DISCLAIMER:**
+I agree with martinzw's **DISCLAIMER:**
 THE HARDWARE SUGGESTIONS THE LISTED SOFTWARE AND ALL INFORMATION HERE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE AND HARDWARE SUGGESTIONS OR THE USE OR OTHER DEALINGS IN THE SOFTWARE AND HARDWARE.
 
 I have no connection to Yamaha / Line6. Every knowledge about the data communications protocol was gained by experimenting, try and error and by looking at the data stream. I especially have not decompiled any part of the Yamaha software application nor of the THR's firmware. Described protocol behaviour can be totally wrong. I only describe results from (good) guesses and succeded experiments - not facts!
