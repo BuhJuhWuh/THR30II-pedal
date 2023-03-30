@@ -121,14 +121,15 @@ int pedal_1_val = 0;
 int pedal_2_val = 0;
 int pedal_1_old_val = 0;
 int pedal_2_old_val = 0;
-int pedal_margin = 1;
+int pedal_margin = 3;
 bool pedal_1_sense = 0;
 bool pedal_2_sense = 0;
 enum ampSelectModes {COL, AMP, CAB};
 ampSelectModes amp_select_mode = COL;
 enum dynModes {Boost, Comp, Gate};
-dynModes dyn_mode = Boost;
+dynModes dyn_mode = Comp;
 bool boost_activated = 0;
+int volume = 0;
 
 USBHost Usb;   //On Teensy3.6 this is the class for the native USB-Host-Interface  
 //It is essential to increase rx queue size in  "USBHost_t3" :   RX_QUEUE_SIZE = 2048  should do the job, i use 4096 to be safe
@@ -167,6 +168,8 @@ String s1("MIDI");
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 int r, b, g = 0;
 uint32_t rgbcolour = 0;
+uint32_t echocolour = 0;
+uint32_t editarrowcolour = strip.gamma32(strip.Color(127,79,0));	//Select colour
 
 uint8_t buf[MIDI_EVENT_PACKET_SIZE];  //Receive buffer for incoming (raw) Messages from THR30II to controller
 uint8_t currentSysEx[310]; //buffer for the currently processed incoming SysEx message (maybe coming in spanning over up to 5 consecutive buffers)
@@ -181,13 +184,6 @@ class THR30II_Settings stored_Patch_Values; //stored settings of a (modified) pa
 
 static volatile int16_t presel_patch_id;   	//ID of actually pre-selected patch (absolute number)
 static volatile int16_t active_patch_id;   	//ID of actually selected patch     (absolute number)
-// static volatile int8_t group_id; 		   	//DELETE? actual Patch Group ID  
-// static volatile int8_t settings_id;        	//DELETE? ID of setting inside Patch group (relative number)
-// static volatile int8_t max_group_id;       	//DELETE? depends on total number of patches (grouped by 5 normal + 5 Solo)
-// static volatile int8_t max_settings_id;    	//DELETE? only <4, if even first group is not complete, otherwise ==4 for all groups except last  (relative number)
-// static volatile int8_t max_solo_id;        	//DELETE? highest (0-based) id for solo in all groups except the last group (-1 if no dedicated solo file at all) (relative number)
-// static volatile int8_t last_solo_id;       	//DELETE? highest (0-based) id for solo in the last group (-1 if no dedicated solo file in last patch) (relative number)
-// static volatile int8_t last_settings_id;   	//DELETE? <4 if last group is incomplete  (relative number)
 static volatile bool send_patch_now = false;//pre-select patch to send (false) or send immediately (true)
 
 static std::vector <String> libraryPatchNames;  //all the names of the patches stored on SD-card or in PROGMEN
@@ -202,7 +198,8 @@ static volatile uint16_t npatches = 0;   //counts the patches stored on SD-card 
 	                                      //patchesII is declared in "patches.h" in this case
 #endif
 
-
+elapsedMillis acktimer;
+uint8_t acktimeout = 200;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
     // SETUP //
@@ -383,7 +380,7 @@ void setup()  //do preparations
  	strip.begin();           // INITIALIZE NeoPixel strip object (REQUIRED)
   	strip.show();            // Turn OFF all pixels ASAP
   	strip.setBrightness(BRIGHTNESS);
-	
+
 	// Initialise patch status
 	if(npatches>0) // patch(es) exist(s)
 	{
@@ -458,6 +455,8 @@ void read_buttons(AceButton* button, uint8_t eventType, uint8_t buttonState)
   	}
 }   //End of read_buttons()
 
+
+
 //global variables, because values must be stored in between two calls of "parse_thr"
 //volatile bool in_sysex = false ; //set, if a SysExMessage has begun, reset if it's end is found (was neccessary for ArduinoDUE / old THR10)
 								   //A SysEx may span over up to 5 consecutive buffers, it is handled on incoming of the last buffer
@@ -479,7 +478,7 @@ UIStates _uistate = UI_idle;  //Always begin with idle state until actual settin
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
-    // TIMING //
+    // GUI TIMING //
 /////////////////////////////////////////////////////////////////////////////////////////////////
 uint32_t tick1=millis();  //Timer for regular mask update
 uint32_t tick2=millis();  //Timer for background mask update for forgotten values
@@ -489,18 +488,18 @@ uint32_t tick5=millis();  //unused timer for resetting the other timers
 
 void timing()
 {
-     if(millis()>tick1+40)  //mask update if it was required because of changed values
-     {
-		 if(maskActive && maskUpdate)
-		 {
-		  THR_Values.updateStatusMask(0,85);
-		  tick1=millis();  //start new waiting period
-		  return;
-		 }
-	 }
+    if(millis()-tick1>40)  //mask update if it was required because of changed values
+    {
+		if(maskActive && maskUpdate)
+		{
+			THR_Values.updateStatusMask(0,85);
+			tick1=millis();  //start new waiting period
+			return;
+		}
+	}
 
-	 if(millis()>tick2+1000)  //force mask update to avoid "forgotten" value changes
-	 {
+	if(millis()-tick2>1000)  //force mask update to avoid "forgotten" value changes
+	{
 	    if(maskActive)
 		{
 		//  THR_Values.updateConnectedBanner();
@@ -508,12 +507,12 @@ void timing()
 		 tick2=millis();  //start new waiting
 		 return;
 		}
-	 }
+	}
 
-	 if(millis()>tick3+1500)  //switch back to mask or selected patchname after showing preselected patchname for a while
-	 {		
-		 if(preNameActive)
-		 {
+	if(millis()-tick3>1500)  //switch back to mask or selected patchname after showing preselected patchname for a while
+	{		
+		if(preNameActive)
+		{
 			preNameActive=false;  //reset showing pre-selected name
 			
 			//patch is not active => local Settings mask should be activated again
@@ -523,10 +522,10 @@ void timing()
 			
 			//tick3=millis();  //start new waiting not necessary, because it is a "1-shot"-Timer
 			return;	
-		 }
-	 }
+		}
+	}
 
-	 if(millis()>tick4+3500)  //force to get all actual settings by dump request
+	 if(millis()-tick4>3500)  //force to get all actual settings by dump request
 	 {
 	    if(maskActive)
 		{
@@ -536,7 +535,7 @@ void timing()
 		}
 	 }
 
-	 if(millis()>tick5+15000)
+	 if(millis()-tick5>15000)
 	 {
 		//TRACE_THR30IIPEDAL( Serial.println("resetting all timers (15s-timeout)"); )
 		// tick5=millis();
@@ -546,6 +545,20 @@ void timing()
 		// tick1=millis();
 	 }
 }
+
+elapsedMillis tickpedals;
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+    // TEMPO TAP TIMING //
+/////////////////////////////////////////////////////////////////////////////////////////////////
+
+uint32_t tempotaptime0 = 0;
+uint32_t tempotaptime1 = 0;
+uint32_t tempotapint = 1000;
+uint32_t tempotaptimeout = 2000;
+uint8_t tempotapbpm = 0;
+uint8_t tempotapsetting = 50;
 
 
 
@@ -622,32 +635,12 @@ void loop()  //infinite working loop:  check midi connection status, poll button
     button9.check();
     button10.check();
 	
-	// Poll pedal inputs
-    pedal_1_sense = !digitalRead(PEDAL_1_SENSE_PIN);  //sense whether pedal 1 present
-	if (pedal_1_sense) {
-		pedal_1_old_val = pedal_1_val;
-		pedal_1_val = 1023-analogRead(PEDAL_1_PIN);   //read in pedal 1 input
-	}
-	else {
-		pedal_1_val = 0;
-	}
-	if ((pedal_1_val >= (pedal_1_old_val - pedal_margin)) && (pedal_1_val <= (pedal_1_old_val + pedal_margin))) {
-		maskUpdate=true;  //request display update to show new states quickly
-	}
-
-  	pedal_2_sense = !digitalRead(PEDAL_2_SENSE_PIN);  //sense whether pedal 2 present
-  	if (pedal_2_sense) {
-		pedal_2_old_val = pedal_2_val;
-		pedal_2_val = 1023-analogRead(PEDAL_2_PIN);   //read in pedal 2 input
-	}
-	else {
-		pedal_2_val = 0;
-	}
-	if ((pedal_2_val >= (pedal_2_old_val - pedal_margin)) && (pedal_2_val <= (pedal_2_old_val + pedal_margin))) {
-		maskUpdate=true;  //request display update to show new states quickly
+	if (tickpedals >= 25)
+	{
+		pollpedalinputs();
+		tickpedals = 0;
 	}
 	
-	// Pedal modes
 
 
 	/////////////////////////////////////////////////////////////////////////////////////////
@@ -675,7 +668,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 
 					break;
 
-					case 1:	// Submit pre-selected patch
+					case 1: // Submit pre-selected patch
 						switch (_uistate)
 						{
 							case UI_home_amp: //no patch is active  (but patch key was pressed)
@@ -708,7 +701,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 2:	// Rotate col/amp/cab, depending on which amp_select_mode is active
+					case 2: // Rotate col/amp/cab, depending on which amp_select_mode is active
 						switch(amp_select_mode)
 						{
 							case COL:
@@ -765,12 +758,13 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 3:
+					case 3: // Tap tempo
+						THR_Values.EchoTempoTap();	//get tempo tap input and apply to echo unit
 						maskUpdate=true;  //request display update to show new states quickly
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 4:	// Decrement patch
+					case 4: // Decrement patch
 						presel_patch_id--;	//decrement pre-selected patch-ID
 						if (presel_patch_id < 1)	//detect wraparound
 						{
@@ -786,7 +780,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 						
-					case 5:	// Increment patch
+					case 5: // Increment patch
 						presel_patch_id++;	//increment pre-selected patch-ID
 						if (presel_patch_id > npatches)	//detect wraparound
 						{
@@ -807,7 +801,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 7:	// Toggle dynamics
+					case 7: // Toggle dynamics
 						switch(dyn_mode)
 						{
 							case Comp:
@@ -854,7 +848,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 8:		// Toggle Effect
+					case 8: // Toggle Effect
 						if(THR_Values.unit[EFFECT])	//check effect unit status
 						{
 							THR_Values.Switch_On_Off_Effect_Unit(false); //if on, switch off
@@ -869,7 +863,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 					
-					case 9:		// Toggle Echo
+					case 9: // Toggle Echo
 						if(THR_Values.unit[ECHO])
 						{
 							THR_Values.Switch_On_Off_Echo_Unit(false);
@@ -884,7 +878,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 10:	// Toggle Reverb
+					case 10: // Toggle Reverb
 						if(THR_Values.unit[REVERB])
 						{
 							THR_Values.Switch_On_Off_Reverb_Unit(false);
@@ -904,7 +898,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 12:	// Rotate amp select mode (COL -> AMP -> CAB -> )
+					case 12: // Rotate amp select mode (COL -> AMP -> CAB -> )
 						switch(amp_select_mode)
 						{
 							case COL:	amp_select_mode = AMP;	break;
@@ -921,13 +915,13 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 14:	// Toggle patch selection mode (pre-select or immediate)
+					case 14: // Toggle patch selection mode (pre-select or immediate)
 						send_patch_now = !send_patch_now;
 						maskUpdate=true;  //request display update to show new states quickly
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 15:	// Increment patch to first entry in next bank of 5
+					case 15: // Increment patch to first entry in next bank of 5
 						presel_patch_id = ((presel_patch_id-1)/5 + 1) * 5 + 1;	//increment pre-selected patch-ID to first of next bank
 						if (presel_patch_id > npatches)	//detect if last patch selected
 						{
@@ -943,12 +937,13 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 16:
+					case 16: // Enter FX edit mode
+						_uistate = UI_edit;
 						maskUpdate=true;  //request display update to show new states quickly
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 17:	// Rotate dynamics mode (Boost -> Comp -> Gate -> )
+					case 17: // Rotate Dynamics Mode (Boost -> Comp -> Gate -> )
 						switch(dyn_mode)
 						{
 							case Boost:	dyn_mode = Comp; 	break;
@@ -960,7 +955,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 18:	// Rotate Effect Mode (Chorus > Flanger > Phaser > Tremolo > )
+					case 18: // Rotate Effect Mode (Chorus > Flanger > Phaser > Tremolo > )
 						switch(THR_Values.effecttype)
 						{
 							case CHORUS:
@@ -988,7 +983,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 					
-					case 19:	// Rotate Echo Mode (Tape Echo > Digital Delay > )
+					case 19: // Rotate Echo Mode (Tape Echo > Digital Delay > )
 						switch(THR_Values.echotype)
 						{
 							case TAPE_ECHO:
@@ -1006,7 +1001,258 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 						button_state=0;  //remove flag, because it is handled
 					break;
 
-					case 20:	// Rotate Reverb Mode (Spring > Room > Plate > Hall > )
+					case 20: // Rotate Reverb Mode (Spring > Room > Plate > Hall > )
+						switch(THR_Values.reverbtype)
+						{
+							case SPRING:
+								THR_Values.ReverbSelect(ROOM);
+								Serial.println("Reverb unit switched from Spring to Room");
+							break;
+
+							case ROOM:
+								THR_Values.ReverbSelect(PLATE);
+								Serial.println("Reverb unit switched from Room to Plate");
+							break;
+
+							case PLATE:
+								THR_Values.ReverbSelect(HALL);
+								Serial.println("Reverb unit switched from Plate to Hall");
+							break;
+
+							case HALL:
+								THR_Values.ReverbSelect(SPRING);
+								Serial.println("Reverb unit switched from Hall to Spring");
+							break;
+						}
+						THR_Values.createPatch();
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+					
+					default:
+
+					break;
+				}
+			break;
+			case UI_edit:
+				switch (button_state)
+				{
+					case 0:
+
+					break;
+
+					case 1:	// Exit edit mode
+						_uistate = UI_home_patch;
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 2:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 3: // Assign expression pedal
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 4:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+						
+					case 5:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 6:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 7: // Toggle dynamics
+						switch(dyn_mode)
+						{
+							case Comp:
+								if(THR_Values.unit[COMPRESSOR])	//check compressor unit status
+								{
+									THR_Values.Switch_On_Off_Compressor_Unit(false); //if on, switch off
+									Serial.println("Compressor unit switched off");
+								}
+								else
+								{
+									THR_Values.Switch_On_Off_Compressor_Unit(true);	//if off, switch on
+									Serial.println("Compressor unit switched on");
+								}
+							break;
+
+							case Boost:
+								if(boost_activated)
+								{
+									undo_gain_boost();
+									Serial.println("Gain boost deactivated");
+								}
+								else
+								{
+									do_gain_boost();
+									Serial.println("Gain boost activated");
+
+								}
+							break;
+
+							case Gate:
+								if(THR_Values.unit[GATE])	//check gate unit status
+								{
+									THR_Values.Switch_On_Off_Gate_Unit(false); //if on, switch off
+									Serial.println("Gate unit switched off");
+								}
+								else
+								{
+									THR_Values.Switch_On_Off_Gate_Unit(true);	//if off, switch on
+									Serial.println("Gate unit switched on");
+								}
+							break;
+						}
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 8: // Toggle Effect
+						if(THR_Values.unit[EFFECT])	//check effect unit status
+						{
+							THR_Values.Switch_On_Off_Effect_Unit(false); //if on, switch off
+							Serial.println("Effect unit switched off");
+						}
+						else
+						{
+							THR_Values.Switch_On_Off_Effect_Unit(true);	//if off, switch on
+							Serial.println("Effect unit switched on");
+						}
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+					
+					case 9: // Toggle Echo
+						if(THR_Values.unit[ECHO])
+						{
+							THR_Values.Switch_On_Off_Echo_Unit(false);
+							Serial.println("Echo unit switched off");
+						}
+						else
+						{
+							THR_Values.Switch_On_Off_Echo_Unit(true);
+							Serial.println("Echo unit switched on");
+						}
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 10: // Toggle Reverb
+						if(THR_Values.unit[REVERB])
+						{
+							THR_Values.Switch_On_Off_Reverb_Unit(false);
+							Serial.println("Reverb unit switched off");
+						}
+						else
+						{
+							THR_Values.Switch_On_Off_Reverb_Unit(true);
+							Serial.println("Reverb unit switched on");
+						}
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 11:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 12:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 13:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 14:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 15:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 16:
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 17: // Rotate Dynamics Mode (Boost -> Comp -> Gate -> )
+						switch(dyn_mode)
+						{
+							case Boost:	dyn_mode = Comp; 	break;
+							case Comp:	dyn_mode = Gate;	break;
+							case Gate:	dyn_mode = Boost; 	break;
+						}
+						Serial.println("Dynamics Mode: "+String(dyn_mode));
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 18: // Rotate Effect Mode (Chorus > Flanger > Phaser > Tremolo > )
+						switch(THR_Values.effecttype)
+						{
+							case CHORUS:
+								THR_Values.EffectSelect(FLANGER);
+								Serial.println("Effect unit switched from Chorus to Flanger");
+							break;
+
+							case FLANGER:
+								THR_Values.EffectSelect(PHASER);
+								Serial.println("Effect unit switched from Flanger to Phaser");
+							break;
+
+							case PHASER:
+								THR_Values.EffectSelect(TREMOLO);
+								Serial.println("Effect unit switched from Phaser to Tremolo");
+							break;
+
+							case TREMOLO:
+								THR_Values.EffectSelect(CHORUS);
+								Serial.println("Effect unit switched from Tremolo to Chorus");
+							break;
+						}
+						THR_Values.createPatch();
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+					
+					case 19: // Rotate Echo Mode (Tape Echo > Digital Delay > )
+						switch(THR_Values.echotype)
+						{
+							case TAPE_ECHO:
+								THR_Values.EchoSelect(DIGITAL_DELAY);
+								Serial.println("Echo unit switched from Tape Echo to Digital Delay");
+							break;
+
+							case DIGITAL_DELAY:
+								THR_Values.EchoSelect(TAPE_ECHO);
+								Serial.println("Effect unit switched from Digital Delay to Tape Echo");
+							break;
+						}
+						THR_Values.createPatch();
+						maskUpdate=true;  //request display update to show new states quickly
+						button_state=0;  //remove flag, because it is handled
+					break;
+
+					case 20: // Rotate Reverb Mode (Spring > Room > Plate > Hall > )
 						switch(THR_Values.reverbtype)
 						{
 							case SPRING:
@@ -1040,10 +1286,6 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 				}
 			break;
 
-			case UI_edit:
-
-			break;
-
 			case UI_save:
 
 			break;
@@ -1063,6 +1305,7 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 	} //button_state!=0
 
 }//end of loop()
+
 
 
 void send_init()  //Try to activate THR30II MIDI 
@@ -1106,6 +1349,45 @@ void send_init()  //Try to activate THR30II MIDI
 
 }//end of send_init
 
+void pollpedalinputs()	// Poll pedal inputs
+{
+	pedal_1_sense = !digitalRead(PEDAL_1_SENSE_PIN);  //sense whether pedal 1 present
+	if (pedal_1_sense) {
+		pedal_1_old_val = pedal_1_val;
+		pedal_1_val = 1023-analogRead(PEDAL_1_PIN);   //read in pedal 1 input
+	}
+	else {
+		pedal_1_val = 0;
+	}
+	if ((pedal_1_val >= (pedal_1_old_val + pedal_margin)) || (pedal_1_val <= (pedal_1_old_val - pedal_margin))) {
+		maskUpdate=true;  //request display update to show new states quickly
+	}
+
+  	pedal_2_sense = !digitalRead(PEDAL_2_SENSE_PIN);  //sense whether pedal 2 present
+  	if (pedal_2_sense) {
+		pedal_2_old_val = pedal_2_val;
+		pedal_2_val = 1023-analogRead(PEDAL_2_PIN);   //read in pedal 2 input
+	}
+	else {
+		pedal_2_val = 0;
+	}
+	if ((pedal_2_val >= (pedal_2_old_val + pedal_margin)) || (pedal_2_val <= (pedal_2_old_val - pedal_margin))) {
+		updatemastervolume(pedal_2_val);
+		// Serial.println(pedal_2_val);
+		maskUpdate=true;  //request display update to show new states quickly
+	}
+}
+
+void updatemastervolume(int mastervolume)
+{
+	Serial.println("updatemastervolume()");
+	int scaledvolume = min(max(mastervolume * 100 / 1024, 0), 100);
+	Serial.println(scaledvolume);
+	THR_Values.sendChangestoTHR=true;
+	THR_Values.SetControl(CTRL_MASTER, scaledvolume);
+	THR_Values.sendChangestoTHR=false;
+}
+
 void do_gain_boost()
 {
 	std::copy( THR_Values.control.begin(),THR_Values.control.end(),THR_Values.control_store.begin());  //save volume and tone related settings
@@ -1124,49 +1406,26 @@ void undo_gain_boost()
 	boost_activated = false;
 }
 
-// void do_volume_patch()   //increases Volume and/or Tone settings for SOLO to be louder than actual patch
-// {
-// 	std::copy( THR_Values.control.begin(),THR_Values.control.end(),THR_Values.control_store.begin());  //save volume and tone related settings
+void THR30II_Settings::EchoTempoTap()
+{
+	// get button press interval (discarding spurious results from long intervals, i.e. only do stuff on multiple presses)
+	tempotaptime0 = tempotaptime1;		// time of last press
+	tempotaptime1 = millis();			// time of most recent press
+	if (tempotaptime1 - tempotaptime0 < tempotaptimeout)	// ignore long intervals >tempotaptimeout
+	{
+		tempotapint = tempotaptime1 - tempotaptime0;	// time interval between presses
+		// TTLEDTimer.update(tempotapint * 500);
+		tempotapsetting = tempotapint/10;	// convert tapped interval to setting value
+		Serial.println(tempotapsetting);
+		tempotapbpm = 60000/tempotapint;
+		Serial.println(tempotapbpm);
 
-// 	if(THR_Values.GetControl(CTRL_MASTER)<100/1.333333)  //is there enough headroom to increase Master Volume by 33% ?
-// 	{
-// 		THR_Values.sendChangestoTHR=true;
-// 		THR_Values.SetControl(CTRL_MASTER, THR_Values.GetControl(CTRL_MASTER)*1.333333);  //do it
-// 		THR_Values.sendChangestoTHR=false;
-// 	}
-// 	else //try to increase volume by simultaneously increasing MID/TREBLE/BASS
-// 	{
-// 		THR_Values.sendChangestoTHR=true;
-// 		double margin=(100.0-THR_Values.GetControl(CTRL_MASTER))/THR_Values.GetControl(CTRL_MASTER);  //maxi MASTER multiplier? (e.g. 0.17)
-// 		THR_Values.SetControl(CTRL_MASTER,100); //use maximum MASTER
-// 		double max_tone= std::max(std::max(THR_Values.GetControl(CTRL_BASS),THR_Values.GetControl(CTRL_MID)),THR_Values.GetControl(CTRL_TREBLE)) ; //highest value of the tone settings 
-// 		double tone_margin=(100.0-max_tone)/max_tone;  //maxi equal TONE-Settings multiplier? (e.g. 0.28)
-// 		if(tone_margin > 0.333333-margin)  //can we increase the TONE settings simultaneously to reach the missing MASTER-increasement?
-// 		{
-// 			THR_Values.SetControl(CTRL_BASS,THR_Values.GetControl(CTRL_BASS)*(1+0.333333-margin));
-// 			THR_Values.SetControl(CTRL_MID, THR_Values.GetControl(CTRL_MID)*(1+0.333333-margin));
-// 			THR_Values.SetControl(CTRL_TREBLE,THR_Values.GetControl(CTRL_TREBLE)*(1+0.333333-margin));
-// 		} 
-// 		else //increase as much as simultaneously possible (one tone setting reaches 100% this way)
-// 		{
-// 			THR_Values.SetControl(CTRL_BASS,THR_Values.GetControl(CTRL_BASS)*(1+tone_margin));
-// 			THR_Values.SetControl(CTRL_MID, THR_Values.GetControl(CTRL_MID)*(1+tone_margin));
-// 			THR_Values.SetControl(CTRL_TREBLE,THR_Values.GetControl(CTRL_TREBLE)*(1+tone_margin));
-// 		}
-// 		THR_Values.sendChangestoTHR=false;
-// 	}
-// }
-
-// void undo_volume_patch()	//restore volume related settings
-// {
-// 	THR_Values.sendChangestoTHR=true;
-// 	THR_Values.SetControl( CTRL_GAIN, 	THR_Values.control_store[CTRL_GAIN] );
-// 	THR_Values.SetControl( CTRL_MASTER, THR_Values.control_store[CTRL_MASTER] );
-// 	THR_Values.SetControl( CTRL_BASS,   THR_Values.control_store[CTRL_BASS] );
-// 	THR_Values.SetControl( CTRL_MID,    THR_Values.control_store[CTRL_MID] );
-// 	THR_Values.SetControl( CTRL_TREBLE, THR_Values.control_store[CTRL_TREBLE] );
-// 	THR_Values.sendChangestoTHR=false;
-// }
+		echo_setting[TAPE_ECHO][TA_TIME] = tempotapsetting;
+		echo_setting[DIGITAL_DELAY][DD_TIME] = tempotapsetting;
+		createPatch();
+	}
+	
+}
 
 void patch_deactivate()
 {
@@ -3038,6 +3297,7 @@ void THR30II_Settings::Switch_On_Off_Reverb_Unit(bool state)   //Setter for swit
 
 void THR30II_Settings::SetControl(uint8_t ctrl, double value)
 {
+   Serial.println("SetControl()");
    control[ctrl]=value;
    if (sendChangestoTHR)
    {
@@ -3459,69 +3719,6 @@ ArduinoQueue<SysExMessage> inqueue(40);
 /////////////////////////////////////////////////////////////////////////////////////////////////
     // UI DRAWING FUNCTIONS //
 /////////////////////////////////////////////////////////////////////////////////////////////////
-/**
- * \brief Draw boxes for the bars and values on the TFT
- *
- * \param x x-position (0) where to place top left corner of status mask
- * \param y y-position     where to place top left corner of status mask
- *
- * \return nothing
- */
-// void drawStatusMask(uint8_t x, uint8_t y)
-// {
-//  tft.fillRect(x,y,tft.width()-x,tft.height()-y,ST7789_BLACK); //clear background
-
-//  y+=25; //advance y - position to the bars
- //THR30II_UNITS { COMPRESSOR=0, CONTROL=1, EFFECT=2, ECHO=3, REVERB=4, GATE=5 };
-//  uint16_t xp[6] = {230 ,0, 98, 142, 186, 274}; //upper left corner for effect units on/off rect frames
- //               Co      Ef   Ec   Re   Ga
-
-//  tft.drawRect( 1+x,0+y,15,111,ST7789_WHITE);  //frame of gain bar
-//  tft.drawRect(20+x,0+y,15,111,ST7789_WHITE);  //frame of master bar
-//  tft.drawRect(40+x,0+y,54,111,ST7789_WHITE);  //frame of bass - treble bar box
-//  tft.drawRect(98+x,0+y,220,118,ST7789_WHITE); //frame effect bars' box
- 
-//  tft.drawLine(57+x,1+y,57+x,109+y,ST7789_LIGHTSLATEGRAY); //separator lines in bass - treble bar box
-//  tft.drawLine(74+x,1+y,74+x,109+y,ST7789_LIGHTSLATEGRAY); 
-
-//  tft.drawLine(xp[ECHO]+x,1+y,xp[ECHO]+x,116+y,ST7789_LIGHTSLATEGRAY); //separator lines in effect bars' box
-//  tft.drawLine(xp[REVERB]+x,1+y,xp[REVERB]+x,116+y,ST7789_LIGHTSLATEGRAY);
-//  tft.drawLine(xp[COMPRESSOR]+x,1+y,xp[COMPRESSOR]+x,116+y,ST7789_LIGHTSLATEGRAY);
-//  tft.drawLine(xp[GATE]+x,1+y,xp[GATE]+x,116+y,ST7789_LIGHTSLATEGRAY);
-
-//  tft.drawLine(xp[EFFECT]+x,110+y,317+x,110+y,ST7789_WHITE); //top of effect's on/off boxes
-//  tft.drawLine(xp[EFFECT]+x,87+y,317+x,87+y,ST7789_WHITE);   //top of effect type boxes
-  
-//  tft.loadFont(AA_FONT_SMALL); // Set a small current font
-//  tft.setTextSize(1);
-//  tft.setTextDatum(TL_DATUM);
- 
-//  tft.setTextColor(ST7789_MAGENTA, TFT_BLACK);
-//  tft.drawString("G",1+x,112+y);//printAt(tft,1+x,112+y,"G");
-//  tft.setTextColor(ST7789_YELLOW, TFT_BLACK);
-//  tft.drawString("M",20+x,112+y);//printAt(tft,20+x,112+y,"M");
-//  tft.setTextColor(ST7789_CORAL, TFT_BLACK);//Light RED
-//  tft.drawString("B",42+x,112+y);//printAt(tft,42+x,112+y,"B"); 
-//  tft.setTextColor(ST7789_GREEN, TFT_BLACK);
-//  tft.drawString("Mi",57+x,112+y);//printAt(tft,57+x,112+y,"Mi");
-//  tft.setTextColor(ST7789_LIGHTBLUE, TFT_BLACK);
-//  tft.drawString("T",79+x,112+y);//printAt(tft,79+x,112+y,"T");
-
- //Set font to very small
-//  tft.setTextSize(1);
-//  tft.setTextColor(ST7789_ORANGE, TFT_BLACK);
-//  tft.drawString("Eff",xp[EFFECT]+x+5,116+y);//printAt(tft,xp[EFFECT]+x+5,116+y,"Eff"); //Effect
-//  tft.setTextColor(ST7789_BEIGE, TFT_BLACK);
-//  tft.drawString("Echo",xp[ECHO]+x,116+y);//printAt(tft,xp[ECHO]+x,116+y,"Echo");   //Echo
-//  tft.setTextColor(ST7789_YELLOWGREEN, TFT_BLACK);
-//  tft.drawString("Rev",xp[REVERB]+x+5,116+y);//rintAt(tft,xp[REVERB]+x+5,116+y,"Rev"); //Reverb
-//  tft.setTextColor(ST7789_RED, TFT_BLACK);
-//  tft.drawString("Com",xp[COMPRESSOR]+x+5,116+y);//printAt(tft,xp[COMPRESSOR]+x+5,116+y,"Com"); //Compressor
-//  tft.setTextColor(ST7789_BLUE, TFT_BLACK);
-//  tft.drawString("Gate",xp[GATE]+x,116+y);//printAt(tft,xp[GATE]+x,116+y,"Gate");   //Gate 
-
-//  tft.unloadFont();
-// }
 
 void drawPatchID(uint16_t fgcolour, int patchID) {
   	int x = 0, y = 0, w = 80, h = 80;
@@ -3793,7 +3990,7 @@ void drawUtilUnit(int x, int y, int w, int h, int bpad, uint16_t bgcolour, uint1
 	spr.deleteSprite();
 }
 
-void drawFXUnit(int x, int y, int w, int h, uint16_t bgcolour, uint16_t fgcolour, String label, int nbars, double FXparams[5]) {
+void drawFXUnit(int x, int y, int w, int h, uint16_t bgcolour, uint16_t fgcolour, String label, int nbars, double FXparams[5], int selectedFXparam) {
 	int tpad = 30; int pad = 2;
 	int grx = pad; int gry = tpad; int grw = w-1-2*pad; int grh = h-1-tpad-pad;
 	int barw = grw/nbars;	// calculate bar width
@@ -3840,6 +4037,11 @@ void drawPPChart(int x, int y, int w, int h, uint16_t bgcolour, uint16_t fgcolou
 	spr.deleteSprite();
 }
 
+void drawFXUnitEditMode()
+{
+
+}
+
 void THR30II_Settings::updateConnectedBanner() //Show the connected Model 
 {
 	// //Display "THRxxII" in blue (as long as connection is established)
@@ -3874,43 +4076,86 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 	// patch icon bank
 	drawPatchIconBank(presel_patch_id, active_patch_id);
 
-	// patch select mode (pre-select/immediate)
-	if (send_patch_now)
-	{
-		drawPatchSelMode(TFT_THRCREAM);
-		switch(_uistate) {
-			case UI_home_amp:
+	// patch select mode (pre-select/immediate) & UI mode
+	switch(_uistate) {
+		case UI_home_amp:
+			if (send_patch_now)
+			{
+				drawPatchSelMode(TFT_THRCREAM);
 				rgbcolour = strip.gamma32(strip.Color(127,127,95));	//Select colour (cream)
-			break;
-			case UI_home_patch:
+				strip.setPixelColor(0, rgbcolour);	//Set pixel's color (in RAM)
+				strip.setPixelColor(4, rgbcolour);	//Set pixel's color (in RAM)
+				strip.setPixelColor(5, rgbcolour);	//Set pixel's color (in RAM)
+			}
+			else
+			{
+				drawPatchSelMode(TFT_THRBROWN);
+				if (presel_patch_id == active_patch_id)
+				{
+					rgbcolour = strip.gamma32(strip.Color(0,95,127));	//Select colour (sky blue)
+				}
+				else
+				{
+					rgbcolour = strip.gamma32(strip.Color(127,127,95));	//Select colour (cream)
+				}
+				strip.setPixelColor(0, rgbcolour);	//Set pixel's color (in RAM)
+				rgbcolour = strip.gamma32(strip.Color(127,79,0));	//Select colour (yellowy-orange)
+				strip.setPixelColor(4, rgbcolour);	//Set pixel's color (in RAM)
+				strip.setPixelColor(5, rgbcolour);	//Set pixel's color (in RAM)
+			}
+			rgbcolour = strip.gamma32(strip.Color(0,0,0));	//Select colour (off)
+			strip.setPixelColor(2, rgbcolour);	//Set pixel's color (in RAM)
+			strip.setPixelColor(3, rgbcolour);	//Set pixel's color (in RAM)
+		break;
+		case UI_home_patch:
+			if (send_patch_now)
+			{
+				drawPatchSelMode(TFT_THRCREAM);
 				rgbcolour = strip.gamma32(strip.Color(0,95,127));	//Select colour (sky blue)
-			break;
-			default:
-			break;
-		}
-		strip.setPixelColor(0, rgbcolour);	//Set pixel's color (in RAM)
-		rgbcolour = strip.gamma32(strip.Color(127,127,95));	//Select colour (cream)
-		strip.setPixelColor(4, rgbcolour);	//Set pixel's color (in RAM)
-		strip.setPixelColor(5, rgbcolour);	//Set pixel's color (in RAM)
-	}
-	else
-	{
-		drawPatchSelMode(TFT_THRBROWN);
-		if ((presel_patch_id == active_patch_id) && (_uistate == UI_home_patch))
-		{
-			rgbcolour = strip.gamma32(strip.Color(0,95,127));	//Select colour (sky blue)
-		}
-		else
-		{
-			rgbcolour = strip.gamma32(strip.Color(127,127,95));	//Select colour (cream)
-		}
-		strip.setPixelColor(0, rgbcolour);	//Set pixel's color (in RAM)
-		rgbcolour = strip.gamma32(strip.Color(127,79,0));	//Select colour (yellowy-orange)
-		strip.setPixelColor(4, rgbcolour);	//Set pixel's color (in RAM)
-		strip.setPixelColor(5, rgbcolour);	//Set pixel's color (in RAM)
+				strip.setPixelColor(0, rgbcolour);	//Set pixel's color (in RAM)
+				rgbcolour = strip.gamma32(strip.Color(127,127,95));	//Select colour (cream)
+				strip.setPixelColor(4, rgbcolour);	//Set pixel's color (in RAM)
+				strip.setPixelColor(5, rgbcolour);	//Set pixel's color (in RAM)
+			}
+			else
+			{
+				drawPatchSelMode(TFT_THRBROWN);
+				if (presel_patch_id == active_patch_id)
+				{
+					rgbcolour = strip.gamma32(strip.Color(0,95,127));	//Select colour (sky blue)
+				}
+				else
+				{
+					rgbcolour = strip.gamma32(strip.Color(127,127,95));	//Select colour (cream)
+				}
+				strip.setPixelColor(0, rgbcolour);	//Set pixel's color (in RAM)
+				rgbcolour = strip.gamma32(strip.Color(127,79,0));	//Select colour (yellowy-orange)
+				strip.setPixelColor(4, rgbcolour);	//Set pixel's color (in RAM)
+				strip.setPixelColor(5, rgbcolour);	//Set pixel's color (in RAM)
+			}
+			rgbcolour = strip.gamma32(strip.Color(0,0,0));	//Select colour (off)
+			strip.setPixelColor(2, rgbcolour);	//Set pixel's color (in RAM)
+			strip.setPixelColor(3, rgbcolour);	//Set pixel's color (in RAM)
+
+		break;
+		case UI_edit:
+			rgbcolour = strip.gamma32(strip.Color(255,0,0));	//Select colour (red)
+			strip.setPixelColor(0, rgbcolour);	//Set pixel's color (in RAM)
+			rgbcolour = strip.gamma32(strip.Color(0,255,0));	//Select colour (green)
+			strip.setPixelColor(2, rgbcolour);	//Set pixel's color (in RAM)
+			rgbcolour = strip.gamma32(strip.Color(127,79,0));	//Select colour (yellowy-orange)
+			strip.setPixelColor(1, rgbcolour);	//Set pixel's color (in RAM)
+			strip.setPixelColor(3, rgbcolour);	//Set pixel's color (in RAM)
+			strip.setPixelColor(4, rgbcolour);	//Set pixel's color (in RAM)
+			strip.setPixelColor(5, rgbcolour);	//Set pixel's color (in RAM)
+		break;
+		default:
+		break;
 	}
 	strip.show();	//Update strip to match
 	
+
+
 	// amp select mode (COL/AMP/CAB)
 	switch (amp_select_mode)
 	{
@@ -3925,13 +4170,7 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 		break;
 	}
 
-	//THR30II_UNITS { COMPRESSOR=0, CONTROL=1, EFFECT=2, ECHO=3, REVERB=4, GATE=5 };
-	// uint16_t xp[6] = {231 ,0, 99, 143, 187, 275}; //upper left corner for effect units on/off rects
-	//               Co     Ef   Ec   Re   Ga
-	// uint8_t measure;	 //helpers for calculating bar lengths
-	// uint16_t delta=100;  //Always the same range for THR30II, THR10II (THR10 has different ranges for parameters)
-	// double val_scale1=108.0/delta;
-	// double val_scale2=85.0/delta;
+
 
 	String FXtitle;
 	uint16_t FXbgcolour = 0;
@@ -3943,43 +4182,19 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 	uint8_t FXw = 60;
 	uint8_t FXh = 100;
 	uint8_t nFXbars = 5;
-	
-	tft.loadFont(AA_FONT_SMALL); //Set a small current font
-	tft.setTextSize(1);
-	tft.setTextDatum(TL_DATUM);
-	tft.setTextPadding(100);
-	// tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-	// tft.drawString(THR30II_CAB_NAMES[cab],x,y);//printAt(tft,x,y,THR30II_CAB_NAMES[cab]);  //write CAB name
-	 
-	tft.setTextColor(TFT_WHITE, TFT_BLACK);
-	// tft.drawString(THR30II_AMP_NAMES[amp],x+(tft.width()-x)/2,y);//printAt(tft,x+(tft.width()-x)/2,y,THR30II_AMP_NAMES[amp]);  //write AMP name
-	// tft.drawString(THR30II_COL_NAMES[col], x+3*(tft.width()-x)/4, y);//printAt(tft,x+3*(tft.width()-x)/4,y, THR30II_COL_NAMES[col]);  //write COL name
+	uint8_t selectedFXparam = 0;
+
 	
 
-	// y+=25; //advance y-position to the bars
-	 
-	// tft.fillRect(x+2,y+1,13,(100-(uint16_t)control[CTRL_GAIN])*val_scale1,ST7789_BLACK); //erase GainBar
-	// tft.fillRect(x+2,y+110-(uint16_t)control[CTRL_GAIN]*val_scale1,13,(uint16_t)control[CTRL_GAIN]*val_scale1,ST7789_MAGENTA); //draw GainBar
-
-	// tft.fillRect(x+21,y+1,13,(100-(uint16_t)control[CTRL_MASTER])*val_scale1,ST7789_BLACK);//erase MasterBar
-	// tft.fillRect(x+21,y+110-(uint16_t)control[CTRL_MASTER]*val_scale1,13,(uint16_t)control[CTRL_MASTER]*val_scale1,ST7789_YELLOW); //draw MasterBar
-
-	// tft.fillRect(x+41,y+1,15,(100-(uint16_t)control[CTRL_BASS])*val_scale1,ST7789_BLACK); //erase Bass-bar
-	// tft.fillRect(x+41,y+110-(uint16_t)control[CTRL_BASS]*val_scale1,15,(uint16_t)control[CTRL_BASS]*val_scale1,ST7789_CORAL);	//draw Bass bar
-
-	// tft.fillRect(x+58,y+1,15,(100-control[CTRL_MID])*val_scale1,ST7789_BLACK);		 //erase Middle-bar
-	// tft.fillRect(x+58,y+110-(uint16_t)control[CTRL_MID]*val_scale1,15,(uint16_t)control[CTRL_MID]*val_scale1,ST7789_GREEN); //draw Middle bar
-
-	// tft.fillRect(x+76,y+1,15,(100-control[CTRL_TREBLE])*val_scale1,ST7789_BLACK);	 //erase Treble-bar
-	// tft.fillRect(x+76,y+110-(uint16_t)control[CTRL_TREBLE]*val_scale1,15,(uint16_t)control[CTRL_TREBLE]*val_scale1,ST7789_LIGHTBLUE); //draw Treble bar
-		
-	// gain/master
+	// Gain/Master
   	if(boost_activated) {
     	drawBarChart(0, 80, 15, 160, TFT_THRDIMORANGE, TFT_THRORANGE, "G", control[CTRL_GAIN]);
   	} else {
     	drawBarChart(0, 80, 15, 160, TFT_THRBROWN, TFT_THRCREAM, "G", control[CTRL_GAIN]);
   	}
   	drawBarChart(15, 80, 15, 160, TFT_THRBROWN, TFT_THRCREAM, "M", control[CTRL_MASTER]);
+
+
 
 	// EQ (B/M/T)
   	drawEQChart(30, 80, 30, 160, TFT_THRBROWN, TFT_THRCREAM, "EQ", control[CTRL_BASS], control[CTRL_MID], control[CTRL_TREBLE]);
@@ -3990,21 +4205,36 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 	switch(col)
 	{
 		case BOUTIQUE:
-		tft.setTextColor(TFT_BLUE, TFT_BLACK);
-		rgbcolour = strip.gamma32(strip.Color(0,0,127));	//Select colour
+			tft.setTextColor(TFT_BLUE, TFT_BLACK);
+			rgbcolour = strip.gamma32(strip.Color(0,0,127));	//Select colour
 		break;
 		case MODERN:
-		tft.setTextColor(TFT_GREEN, TFT_BLACK);
-		rgbcolour = strip.gamma32(strip.Color(0,127,0));	//Select colour
+			tft.setTextColor(TFT_GREEN, TFT_BLACK);
+			rgbcolour = strip.gamma32(strip.Color(0,127,0));	//Select colour
 		break;
 		case CLASSIC:
-		tft.setTextColor(TFT_RED, TFT_BLACK);
-		rgbcolour = strip.gamma32(strip.Color(127,0,0));	//Select colour
+			tft.setTextColor(TFT_RED, TFT_BLACK);
+			rgbcolour = strip.gamma32(strip.Color(127,0,0));	//Select colour
 		break;
 	}
   	drawAmpUnit(60, 80, 240, 60, TFT_THRCREAM, TFT_THRBROWN, "Amp", col, amp, cab);
-	strip.setPixelColor(1, rgbcolour);	//Set pixel's color (in RAM)
-	strip.show();	//Update strip to match
+	switch(_uistate)
+	{
+		case UI_idle:
+		case UI_home_amp:
+		case UI_home_patch:
+			strip.setPixelColor(1, rgbcolour);	//Set pixel's color (in RAM)
+			strip.show();	//Update strip to match
+		break;
+		case UI_edit:
+			strip.setPixelColor(1, editarrowcolour);	//Set pixel's color (in RAM)
+			strip.show();	//Update strip to match
+		break;
+		case UI_save:
+		case UI_name:
+		break;
+	}
+	
 
 
 
@@ -4127,7 +4357,7 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 	
 	FXx = 120;	// set FX unit position
 	FXy = 140;
-	drawFXUnit(FXx, FXy, FXw, FXh, FXbgcolour, FXfgcolour, FXtitle, nFXbars, FXparams);
+	drawFXUnit(FXx, FXy, FXw, FXh, FXbgcolour, FXfgcolour, FXtitle, nFXbars, FXparams, selectedFXparam);
 
 
 
@@ -4153,7 +4383,7 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 			FXparams[2] = echo_setting[TAPE_ECHO][TA_BASS];
 			FXparams[3] = echo_setting[TAPE_ECHO][TA_TREBLE];
 			FXparams[4] = echo_setting[TAPE_ECHO][TA_MIX];
-			nFXbars = 5;  
+			nFXbars = 5;
 		break;
 
 		case DIGITAL_DELAY:
@@ -4178,13 +4408,14 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 			nFXbars = 5;  
 		break;
 	}	//of switch(effecttype)
-		
+	
+	echocolour = rgbcolour;
 	strip.setPixelColor(8, rgbcolour);	//Set pixel's color (in RAM)
 	strip.show();	//Update strip to match
 	
 	FXx = 180;	// set FX unit position
 	FXy = 140;
-	drawFXUnit(FXx, FXy, FXw, FXh, FXbgcolour, FXfgcolour, FXtitle, nFXbars, FXparams);
+	drawFXUnit(FXx, FXy, FXw, FXh, FXbgcolour, FXfgcolour, FXtitle, nFXbars, FXparams, selectedFXparam);
 
 
 
@@ -4285,7 +4516,7 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 	
 	FXx = 240;	// set FX unit position
 	FXy = 140;
-	drawFXUnit(FXx, FXy, FXw, FXh, FXbgcolour, FXfgcolour, FXtitle, nFXbars, FXparams);
+	drawFXUnit(FXx, FXy, FXw, FXh, FXbgcolour, FXfgcolour, FXtitle, nFXbars, FXparams, selectedFXparam);
 
 
 
@@ -4293,40 +4524,6 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
   	drawPPChart(300, 80, 20, 160, TFT_THRBROWN, TFT_THRCREAM, "P", pedal_1_val, pedal_2_val);
 
 	
-
-	//Compressor
-	// tft.fillRect(x+xp[COMPRESSOR],y+89,43,20,ST7789_BLACK); //erase effect type box (Compressor)
-	// tft.fillRect(x+xp[COMPRESSOR],y+1,43,85,ST7789_BLACK);  //erase effect bars box (Compressor)
-	 
-	// if(unit[COMPRESSOR]) //if unit activated, draw values as vertical lines
-	// {
-		//{0, 100}, //sustain			
-		// measure=(uint8_t)(compressor_setting[CO_SUSTAIN]*val_scale2) ;
-		// tft.fillRect(x+xp[COMPRESSOR]+0,y+86-measure,21,measure,ST7789_BEIGE);
-		//{0, 100}, //level
-		// measure=(uint8_t)(compressor_setting[CO_LEVEL]*val_scale2) ;
-		// tft.fillRect(x+xp[COMPRESSOR]+21,y+86-measure,21,measure,ST7789_GREEN);
-		//{0, 100}, //mix
-		// measure=(uint8_t)(compressor_setting[CO_MIX]*val_scale2) ;
-		// tft.fillRect(x+xp[COMPRESSOR]+29,y+86-measure,13,measure,ST7789_RED);
-	// }//of Compressor activated
-
-	
-	  
-	// tft.setTextPadding(0);
-	// tft.unloadFont();
-
-	//Gate
-	// tft.fillRect(x+xp[GATE],y+1,42,85,ST7789_BLACK); //erase effect bars box (Gate)
-	// if(unit[GATE]) //if unit activated, draw delay values as vertical lines
-	// {
-		//{0, 100}, //threshold
-		// measure=gate_setting[GA_THRESHOLD]*val_scale2;
-		// tft.fillRect(x+xp[GATE]+0,y+86-measure,21,measure,ST7789_LIGHTBLUE);
-		//{0, 100}, //gate decay
-		// measure=gate_setting[GA_DECAY]*val_scale2;
-		// tft.fillRect(x+xp[GATE]+21,y+86-measure,21,measure,ST7789_RED);
-	// }//of Gate activated
 
 	// Dynamics LED
 	switch(dyn_mode)
@@ -4431,16 +4628,17 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 
 		break;
 	}
-	 
+	
 	maskUpdate=false;  //tell local GUI, that mask is updated
 }
 
 void WorkingTimer_Tick()
 {
 	//Care about queued incoming messages
-
+	
 	if (inqueue.item_count() > 0)
 	{
+		Serial.println("WorkingTimer_Tick() item(s) in inqueue");
 		SysExMessage msg (inqueue.dequeue());
 		Serial.println(THR_Values.ParseSysEx(msg.getData(),msg.getSize()));
 		//THR_Values.ParseSysEx(msg.getData(),msg.getSize());
@@ -4457,37 +4655,59 @@ void WorkingTimer_Tick()
     	
 	if (outqueue.item_count() > 0)   
 	{	
+		// Serial.println("WorkingTimer_Tick() item(s) in outqueue");
 		Outmessage *msg = outqueue.getHeadPtr();  //& means: directly work message in queue, don't copy it
 		
 		if (!msg->_sent_out)  
 		{  
+			Serial.println("sending message out");
+
 			midi1.sendSysEx(msg->_msg.getSize(),(uint8_t *)(msg->_msg.getData()),true);
 			
-			Serial.println("sent out");
-			msg->_sent_out = true;	
+			Serial.println("sent message out");
+			msg->_sent_out = true;
+			acktimer = 0;
 							
 		}  //of "not sent out"
 		else if (!msg->_needs_ack && !msg->_needs_answer)   //needs no ACK and no Answer
 		{
 			outqueue.dequeue();
-			Serial.println("dequ no ack, no answ"); 
+			Serial.println("dequ: no ack needed, no answer needed");
+			Serial.println(acktimer);
+			acktimer = 0;
 		}
 		else  //sent out, and needs  ack   or   answer
 		{
 			if (msg->_needs_ack)              
 			{
+				// Serial.println("dequ: ack needed");
+				// Serial.println(acktimer);
+
+				if (acktimer > acktimeout)	// add timeout to so that any missed acks don't freeze pedal: timeout length > expected normal reply time
+				{
+					outqueue.dequeue();  // => ready
+					Serial.println("dequ: ack timed out");
+					Serial.println(acktimer);
+					acktimer = 0;
+				}
+
 				if (msg->_acknowledged)
 				{
+					Serial.println("dequ: ack OK");
+					// Serial.println(acktimer);
 					if (!msg->_needs_answer)   //ack OK, no answer needed
 					{
 						outqueue.dequeue();  // => ready
-						Serial.println("dequ ack, no answ");						
+						Serial.println("dequ: ack OK, no answer needed");
+						Serial.println(acktimer);						
 					}
 					else if (msg->_answered)   //ack OK, Answer received
 					{
 						outqueue.dequeue();  //=> ready
-					    Serial.println("dequ ack and answ");						
+					    Serial.println("dequ: ack OK, answer received");
+						Serial.println(acktimer);						
 					}
+					acktimer = 0;
 				}
 			}
 			else  if(msg->_needs_answer)   //only need Answer, no Ack
@@ -4495,7 +4715,9 @@ void WorkingTimer_Tick()
 				if (msg->_answered)   //Answer received
 				{
 					outqueue.dequeue();  //=>ready
-					Serial.println("dequ no ack but answ");
+					Serial.println("dequ: no ack needed, but answer needed");
+					Serial.println(acktimer);
+					acktimer = 0;
 				}
 			}
 		}

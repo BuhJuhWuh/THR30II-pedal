@@ -304,6 +304,7 @@ class THR30II_Settings
 	void ReverbSelect(THR30II_REV_TYPES type);  //Setter for selection of the reverb type
 	void EffectSelect(THR30II_EFF_TYPES type);   //Setter for selection of the Effect type
 	void EchoSelect(THR30II_ECHO_TYPES type);   //Setter for selection of the Echo type
+	void EchoTempoTap();
 
 	String ParseSysEx(const byte cur[], int cur_len);
 	
@@ -321,6 +322,9 @@ class THR30II_Settings
 	template <typename T>
 	void  SendParameterSetting( un_cmd command, type_val <T> valu)  //Send setting to THR
 	{
+		Serial.println("SendParameterSetting()");
+		//Serial.println(command);
+		//Serial.println(valu);
 		if (!MIDI_Activated)
 			return;
 		

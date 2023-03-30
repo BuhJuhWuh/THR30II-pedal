@@ -37,6 +37,9 @@ void WorkingTimer_Tick();
 void drawConnIcon(bool THRconnected);
 void do_gain_boost();
 void undo_gain_boost();
+void pollpedalinputs();
+void updatemastervolume(int mastervolume);
+void blinkTTLED();
 
 extern String preSelName; //Name of the pre selected patch
 
