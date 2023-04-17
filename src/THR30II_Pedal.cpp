@@ -24,7 +24,7 @@
 */
 
 #include <Arduino.h>
-#include <USBHost_t36.h>    	//Without Paul Stoffregen's Teensy3.6-Midi library nothing will work! (Mind increasing rx queue size in  "USBHost_t3" :   RX_QUEUE_SIZE = 2048)
+#include <USBHost_t36.h>    	//Without Paul Stoffregen's Teensy3.6-Midi library nothing will work! (Mind increasing rx queue size in MIDI_big_buffer class in "USBHost_t36.h" :   RX_QUEUE_SIZE = 2048)
 #include <SPI.h>    		  	//For communication with TFT-Display (SD-Card uses SDIO -SDHC-Interface on Teensy 3.6)
 #include <Adafruit_GFX.h>   	//Virtual superclass for drawing (included in "2_8_Friendly_t3.h")
 #include <TFT_eSPI.h>			//TFT screen library
@@ -129,7 +129,7 @@ ampSelectModes amp_select_mode = COL;
 enum dynModes {Boost, Comp, Gate};
 dynModes dyn_mode = Comp;
 bool boost_activated = 0;
-int volume = 0;
+double scaledvolume = 0;
 
 USBHost Usb;   //On Teensy3.6 this is the class for the native USB-Host-Interface  
 //It is essential to increase rx queue size in  "USBHost_t3" :   RX_QUEUE_SIZE = 2048  should do the job, i use 4096 to be safe
@@ -161,6 +161,7 @@ int button_state = 0;
 int16_t x=0, y=0, xx1 = 0, yy1 = 0;
 String s1("MIDI");
 #define MIDI_EVENT_PACKET_SIZE  64 //for THR30II    was much bigger on old THR10
+#define OUTQUEUE_TIMEOUT 250 //Timeout if a message is not acknowledged or answered
 
 // LED initialisation
 #define LED_COUNT 10
@@ -199,7 +200,7 @@ static volatile uint16_t npatches = 0;   //counts the patches stored on SD-card 
 #endif
 
 elapsedMillis acktimer;
-uint8_t acktimeout = 200;
+uint16_t acktimeout = 250;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
     // SETUP //
@@ -635,11 +636,11 @@ void loop()  //infinite working loop:  check midi connection status, poll button
     button9.check();
     button10.check();
 	
-	if (tickpedals >= 25)
-	{
-		pollpedalinputs();
-		tickpedals = 0;
-	}
+	// if (tickpedals >= 40)
+	// {
+	// 	pollpedalinputs();
+	// 	tickpedals = 0;
+	// }
 	
 
 
@@ -655,8 +656,8 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 		TRACE_V_THR30IIPEDAL(Serial.println();)
 		TRACE_V_THR30IIPEDAL(Serial.println("button_state: " + String(button_state));)
 		TRACE_V_THR30IIPEDAL(Serial.println("Old UI_state: " + String(_uistate));)
-		TRACE_V_THR30IIPEDAL(Serial.println("Old THR_Values.sendChangestoTHR: " + String(THR_Values.sendChangestoTHR));)
-		TRACE_V_THR30IIPEDAL(Serial.println("Old stored_THR_Values.sendChangestoTHR: " + String(stored_THR_Values.sendChangestoTHR));)
+		// TRACE_V_THR30IIPEDAL(Serial.println("Old THR_Values.sendChangestoTHR: " + String(THR_Values.sendChangestoTHR));)
+		// TRACE_V_THR30IIPEDAL(Serial.println("Old stored_THR_Values.sendChangestoTHR: " + String(stored_THR_Values.sendChangestoTHR));)
 		switch (_uistate)
 		{
 			case UI_idle:
@@ -1299,8 +1300,8 @@ void loop()  //infinite working loop:  check midi connection status, poll button
 			break;
 		}
 		TRACE_V_THR30IIPEDAL(Serial.println("New UI_state: " + String(_uistate));)
-		TRACE_V_THR30IIPEDAL(Serial.println("New THR_Values.sendChangestoTHR: " + String(THR_Values.sendChangestoTHR));)
-		TRACE_V_THR30IIPEDAL(Serial.println("New stored_THR_Values.sendChangestoTHR: " + String(stored_THR_Values.sendChangestoTHR));)
+		// TRACE_V_THR30IIPEDAL(Serial.println("New THR_Values.sendChangestoTHR: " + String(THR_Values.sendChangestoTHR));)
+		// TRACE_V_THR30IIPEDAL(Serial.println("New stored_THR_Values.sendChangestoTHR: " + String(stored_THR_Values.sendChangestoTHR));)
 
 	} //button_state!=0
 
@@ -1380,8 +1381,10 @@ void pollpedalinputs()	// Poll pedal inputs
 
 void updatemastervolume(int mastervolume)
 {
-	Serial.println("updatemastervolume()");
-	int scaledvolume = min(max(mastervolume * 100 / 1024, 0), 100);
+	Serial.print("updatemastervolume(" + String(mastervolume) + ") = ");
+	// Serial.print(mastervolume);
+	// Serial.println(")");
+	scaledvolume = min(max((static_cast<double>(mastervolume)+1) * 100 / 1024, 0), 100);
 	Serial.println(scaledvolume);
 	THR_Values.sendChangestoTHR=true;
 	THR_Values.SetControl(CTRL_MASTER, scaledvolume);
@@ -3297,7 +3300,7 @@ void THR30II_Settings::Switch_On_Off_Reverb_Unit(bool state)   //Setter for swit
 
 void THR30II_Settings::SetControl(uint8_t ctrl, double value)
 {
-   Serial.println("SetControl()");
+//    Serial.println("SetControl()");
    control[ctrl]=value;
    if (sendChangestoTHR)
    {
@@ -4632,13 +4635,101 @@ void THR30II_Settings::updateStatusMask(uint8_t x, uint8_t y)
 	maskUpdate=false;  //tell local GUI, that mask is updated
 }
 
-void WorkingTimer_Tick()
+// void WorkingTimer_Tick() // BJW edited version
+// {
+// 	//Care about queued incoming messages
+	
+// 	if (inqueue.item_count() > 0)
+// 	{
+// 		Serial.println("WorkingTimer_Tick() item(s) in inqueue");
+// 		SysExMessage msg (inqueue.dequeue());
+// 		Serial.println(THR_Values.ParseSysEx(msg.getData(),msg.getSize()));
+// 		//THR_Values.ParseSysEx(msg.getData(),msg.getSize());
+
+// 		if(!maskActive)
+// 		{
+// 			maskActive=true;  //tell GUI to show Settings mask
+// 			// drawStatusMask(0,85);
+// 		}
+// 		maskUpdate=true;  //tell GUI to update mask one time because of changed settings       
+// 	}		
+
+// 	//Care about next queued outgoing SysEx, if at least one is pending
+    	
+// 	if (outqueue.item_count() > 0)
+// 	{	
+// 		// Serial.println("WorkingTimer_Tick() item(s) in outqueue");
+// 		// Serial.println("outqueue.item_count =  " + String(outqueue.item_count()));
+// 		Outmessage *msg = outqueue.getHeadPtr();  //& means: directly work message in queue, don't copy it
+		
+// 		if (!msg->_sent_out)  
+// 		{  
+// 			// Serial.println("sending message out");
+
+// 			midi1.sendSysEx(msg->_msg.getSize(),(uint8_t *)(msg->_msg.getData()),true);
+			
+// 			// Serial.println("sent message out");
+// 			msg->_sent_out = true;
+// 			acktimer = 0;
+							
+// 		}  //of "not sent out"
+// 		else if (!msg->_needs_ack && !msg->_needs_answer)   //needs no ACK and no Answer
+// 		{
+// 			outqueue.dequeue();
+// 			Serial.println("dequ: no ack needed, no answer needed " + String(acktimer));
+// 			acktimer = 0;
+// 		}
+// 		else  //sent out, and needs  ack   or   answer
+// 		{
+// 			if (msg->_needs_ack)              
+// 			{
+// 				// Serial.println("dequ: ack needed " + String(acktimer));
+
+// 				if (acktimer > acktimeout)	// add timeout to so that any missed acks don't freeze pedal: timeout length > expected normal reply time
+// 				{
+// 					outqueue.dequeue();  // => ready
+// 					Serial.println("dequ: ack timed out " + String(acktimer));
+// 					rgbcolour = strip.gamma32(strip.Color(255,0,0));	//Select colour (red)
+// 					strip.setPixelColor(2, rgbcolour);	//Set pixel's color (in RAM)
+// 					strip.show();
+// 					acktimer = 0;
+// 				}
+
+// 				if (msg->_acknowledged)
+// 				{
+// 					Serial.println("dequ: ack OK " + String(acktimer));
+// 					if (!msg->_needs_answer)   //ack OK, no answer needed
+// 					{
+// 						outqueue.dequeue();  // => ready
+// 						Serial.println("dequ: ack OK, no answer needed " + String(acktimer));
+// 					}
+// 					else if (msg->_answered)   //ack OK, Answer received
+// 					{
+// 						outqueue.dequeue();  //=> ready
+// 					    Serial.println("dequ: ack OK, answer received " + String(acktimer));
+// 					}
+// 					acktimer = 0;
+// 				}
+// 			}
+// 			else  if(msg->_needs_answer)   //only need Answer, no Ack
+// 			{
+// 				if (msg->_answered)   //Answer received
+// 				{
+// 					outqueue.dequeue();  //=>ready
+// 					Serial.println("dequ: no ack needed, but answer needed " + String(acktimer));
+// 					acktimer = 0;
+// 				}
+// 			}
+// 		}
+// 	}
+// }
+
+void WorkingTimer_Tick() // latest martinzw version + BJW debug msgs
 {
 	//Care about queued incoming messages
-	
+
 	if (inqueue.item_count() > 0)
 	{
-		Serial.println("WorkingTimer_Tick() item(s) in inqueue");
 		SysExMessage msg (inqueue.dequeue());
 		Serial.println(THR_Values.ParseSysEx(msg.getData(),msg.getSize()));
 		//THR_Values.ParseSysEx(msg.getData(),msg.getSize());
@@ -4646,7 +4737,7 @@ void WorkingTimer_Tick()
 		if(!maskActive)
 		{
 			maskActive=true;  //tell GUI to show Settings mask
-			// drawStatusMask(0,85);
+			//drawStatusMask(0,85);
 		}
 		maskUpdate=true;  //tell GUI to update mask one time because of changed settings       
 	}		
@@ -4655,69 +4746,64 @@ void WorkingTimer_Tick()
     	
 	if (outqueue.item_count() > 0)   
 	{	
-		// Serial.println("WorkingTimer_Tick() item(s) in outqueue");
-		Outmessage *msg = outqueue.getHeadPtr();  //& means: directly work message in queue, don't copy it
+		Outmessage *msg = outqueue.getHeadPtr();  //point to first message in queue
 		
-		if (!msg->_sent_out)  
+		if (!msg->_sent_out)    //not sent out yet? ==> send it out
 		{  
-			Serial.println("sending message out");
-
 			midi1.sendSysEx(msg->_msg.getSize(),(uint8_t *)(msg->_msg.getData()),true);
 			
-			Serial.println("sent message out");
+			Serial.println("msg #" + String((msg->_id)) + " sent out");
 			msg->_sent_out = true;
-			acktimer = 0;
+			msg->_time_stamp=millis();	
 							
 		}  //of "not sent out"
-		else if (!msg->_needs_ack && !msg->_needs_answer)   //needs no ACK and no Answer
+		else if (!msg->_needs_ack && !msg->_needs_answer)   //needs no ACK and no Answer? ==> done with this message
 		{
 			outqueue.dequeue();
-			Serial.println("dequ: no ack needed, no answer needed");
-			Serial.println(acktimer);
-			acktimer = 0;
+			Serial.println("msg #" + String((msg->_id)) + " dequ no ack, no answ, t=" + String(millis()-msg->_time_stamp)); 
 		}
-		else  //sent out, and needs  ack   or   answer
+		else  //sent out, and needs   ack   or   answer   ==> check it
 		{
 			if (msg->_needs_ack)              
 			{
-				// Serial.println("dequ: ack needed");
-				// Serial.println(acktimer);
-
-				if (acktimer > acktimeout)	// add timeout to so that any missed acks don't freeze pedal: timeout length > expected normal reply time
-				{
-					outqueue.dequeue();  // => ready
-					Serial.println("dequ: ack timed out");
-					Serial.println(acktimer);
-					acktimer = 0;
-				}
-
 				if (msg->_acknowledged)
 				{
-					Serial.println("dequ: ack OK");
-					// Serial.println(acktimer);
-					if (!msg->_needs_answer)   //ack OK, no answer needed
+					if (!msg->_needs_answer)   //ack OK, no answer needed   ==> done with this message
 					{
 						outqueue.dequeue();  // => ready
-						Serial.println("dequ: ack OK, no answer needed");
-						Serial.println(acktimer);						
+						Serial.println("msg #" + String((msg->_id)) + " dequ ack, no answ, t=" + String(millis()-msg->_time_stamp));						
 					}
 					else if (msg->_answered)   //ack OK, Answer received
 					{
 						outqueue.dequeue();  //=> ready
-					    Serial.println("dequ: ack OK, answer received");
-						Serial.println(acktimer);						
+					    Serial.println("msg #" + String((msg->_id)) + " dequ ack and answ, t=" + String(millis()-msg->_time_stamp));						
 					}
-					acktimer = 0;
 				}
+				else if (millis()-msg->_time_stamp > OUTQUEUE_TIMEOUT )	// if msg not acknowledged, check for timeout.
+																		// if timed out, discard.  (Or re-send...?)
+				{
+					outqueue.dequeue();  //=>ready
+					Serial.println("Timeout waiting for acknowledge. Discarded Message #" + String((msg->_id)) + " t=" + String(millis()-msg->_time_stamp));
+					rgbcolour = strip.gamma32(strip.Color(255,0,0));	//Select colour (red)
+					strip.setPixelColor(2, rgbcolour);	//Set pixel's color (in RAM)
+					strip.show();
+				}
+				
 			}
-			else  if(msg->_needs_answer)   //only need Answer, no Ack
+			else if (msg->_needs_answer)   //only need Answer, no Ack
 			{
 				if (msg->_answered)   //Answer received
 				{
 					outqueue.dequeue();  //=>ready
-					Serial.println("dequ: no ack needed, but answer needed");
-					Serial.println(acktimer);
-					acktimer = 0;
+					Serial.println("msg #" + String((msg->_id)) + " dequ no ack but answ, t=" + String(millis()-msg->_time_stamp));
+				}
+				else if (millis()-msg->_time_stamp > OUTQUEUE_TIMEOUT )
+				{
+					outqueue.dequeue();  //=>ready
+					Serial.println("Timeout waiting for answer. Discarded Message #" + String((msg->_id)) + " t=" + String(millis()-msg->_time_stamp));
+					rgbcolour = strip.gamma32(strip.Color(255,0,0));	//Select colour (red)
+					strip.setPixelColor(2, rgbcolour);	//Set pixel's color (in RAM)
+					strip.show();
 				}
 			}
 		}
